@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>翻译器</title>
+<style>
+  :root{
+    --bg:#0b0c0f;
+    --surface:rgba(255,255,255,.035);
+    --surface-2:rgba(255,255,255,.06);
+    --line:rgba(255,255,255,.08);
+    --line-soft:rgba(255,255,255,.05);
+    --text:#e9ebef;
+    --text-dim:#8b93a1;
+    --text-faint:#5c6472;
+    --accent:#7c8cff;
+    --accent-soft:rgba(124,140,255,.14);
+    --accent-glow:rgba(124,140,255,.35);
+    --radius:16px;
+    --radius-sm:12px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0; padding:28px 18px 48px;
+    font-family:-apple-system, "Noto Sans CJK SC", "HarmonyOS Sans SC", "PingFang SC", sans-serif;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(124,140,255,.10) 0%, transparent 55%),
+      radial-gradient(90% 60% at 100% 0%, rgba(180,120,255,.06) 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+    letter-spacing:.01em;
+    animation:fadeIn .5s ease;
+  }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  .wrap{ max-width:640px; margin:0 auto; }
+
+  /* 头部 */
+  .head{ margin-bottom:26px; }
+  .head h1{
+    font-size:26px; font-weight:650; letter-spacing:-.02em;
+    margin:0 0 6px; display:flex; align-items:center; gap:10px;
+  }
+  .head h1 .dot{
+    width:9px; height:9px; border-radius:50%;
+    background:var(--accent); box-shadow:0 0 14px var(--accent-glow);
+    flex:none;
+  }
+  .head p{ margin:0; font-size:13.5px; color:var(--text-faint); letter-spacing:.02em; }
+
+  /* Tabs */
+  .tabs{
+    display:inline-flex; gap:4px; padding:4px; margin-bottom:24px;
+    background:var(--surface); border:1px solid var(--line-soft);
+    border-radius:14px; backdrop-filter:blur(12px);
+  }
+  .tab{
+    padding:8px 20px; border-radius:10px; font-size:14px; font-weight:500;
+    color:var(--text-dim); cursor:pointer; user-select:none;
+    transition:all .25s cubic-bezier(.4,0,.2,1);
+  }
+  .tab.on{
+    background:var(--accent-soft); color:var(--text);
+    box-shadow:inset 0 0 0 1px rgba(124,140,255,.2);
+  }
+  .panel{ display:none; animation:fadeIn .35s ease; }
+  .panel.on{ display:block; }
+
+  /* 卡片 */
+  .card{
+    background:var(--surface); border:1px solid var(--line-soft);
+    border-radius:var(--radius); padding:18px;
+    backdrop-filter:blur(16px);
+  }
+
+  /* 行 */
+  .row{ display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .row:last-child{ margin-bottom:0; }
+
+  /* 控件 */
+  select,input[type=text],textarea,button{ font-family:inherit; font-size:15px; }
+  select,input[type=text]{
+    appearance:none; -webkit-appearance:none;
+    background:var(--surface-2); color:var(--text);
+    border:1px solid var(--line); border-radius:var(--radius-sm);
+    padding:11px 14px; flex:1; min-width:0;
+    transition:border-color .25s, box-shadow .25s, background .25s;
+  }
+  select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center;
+    padding-right:38px;
+  }
+  select:focus,input:focus,textarea:focus{
+    outline:none; border-color:rgba(124,140,255,.55);
+    box-shadow:0 0 0 3px var(--accent-soft);
+    background:rgba(255,255,255,.075);
+  }
+  textarea{
+    width:100%; min-height:132px; resize:vertical; line-height:1.6;
+    background:var(--surface-2); color:var(--text);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px;
+    transition:border-color .25s, box-shadow .25s, background .25s;
+  }
+  ::placeholder{ color:var(--text-faint); }
+
+  /* 按钮 */
+  button{
+    border:none; border-radius:var(--radius-sm); padding:11px 20px;
+    font-weight:560; cursor:pointer; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line);
+    transition:all .22s cubic-bezier(.4,0,.2,1);
+  }
+  button:active{ transform:scale(.97); }
+  button.primary{
+    background:linear-gradient(135deg, #7c8cff, #9d7cff);
+    border:none; color:#fff; font-weight:600;
+    box-shadow:0 6px 20px -6px var(--accent-glow);
+  }
+  button.primary:active{ box-shadow:0 3px 12px -4px var(--accent-glow); }
+  button.ghost{ color:var(--text-dim); font-weight:450; }
+  button.ghost:hover, button#save:hover{ color:var(--text); border-color:var(--line); }
+
+  .swap{
+    flex:none; width:44px; height:44px; padding:0; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:17px; color:var(--text-dim);
+    background:var(--surface-2); border:1px solid var(--line);
+  }
+  .swap:hover{ color:var(--accent); border-color:rgba(124,140,255,.4); }
+
+  /* 输出区 */
+  .out{
+    background:rgba(0,0,0,.25); border:1px solid var(--line-soft);
+    border-radius:var(--radius); padding:16px; min-height:132px;
+    line-height:1.6; white-space:pre-wrap; word-break:break-word;
+    font-size:16px;
+  }
+  .out.rtl{ direction:rtl; text-align:right; }
+
+  .muted{ color:var(--text-faint); font-size:14px; }
+
+  /* 状态 */
+  .status{ font-size:13.5px; margin-top:12px; min-height:20px; color:var(--text-dim); letter-spacing:.01em; }
+  .ok{ color:#5ed3a0; } .err{ color:#ff7a85; }
+
+  /* 标签 & 设置 */
+  .kv{ margin-bottom:18px; }
+  .kv:last-of-type{ margin-bottom:12px; }
+  .kv label{
+    display:block; font-size:12.5px; color:var(--text-faint);
+    margin-bottom:7px; letter-spacing:.03em; text-transform:uppercase;
+  }
+  .kv input{ margin-bottom:12px; }
+  .kv input:last-child{ margin-bottom:0; }
+
+  .hint{
+    font-size:13.5px; color:var(--text-faint); line-height:1.7;
+    margin:0 0 22px; letter-spacing:.01em;
+  }
+  .hint b{ color:var(--text-dim); font-weight:600; }
+
+  /* 引擎徽标行 */
+  .engline{ font-size:12.5px; color:var(--text-faint); margin-top:14px; letter-spacing:.02em; }
+
+  /* 禁用/加载态 */
+  button:disabled{ opacity:.6; cursor:default; }
+  button:disabled:active{ transform:none; }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.12); border-radius:4px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  /* 小屏适配 */
+  @media (max-width:420px){
+    .head h1{ font-size:23px; }
+    body{ padding:22px 14px 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <h1><span class="dot"></span>翻译器</h1>
+    <p>多引擎 · 多语种 · 一键互译</p>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on" data-tab="trans">翻译</div>
+    <div class="tab" data-tab="set">设置</div>
+  </div>
+
+  <!-- 翻译面板 -->
+  <div class="panel on" id="panel-trans">
+    <div class="row">
+      <select id="engine">
+        <option value="tencent_free">腾讯 · 免费推荐</option>
+        <option value="uyghur_free">维吾尔语 · 免费</option>
+        <option value="youdao_free">有道 · 免费</option>
+        <option value="google_free">谷歌 · 免费接口</option>
+        <option value="baidu">百度 · 需 Key</option>
+        <option value="youdao">有道 · 需 Key</option>
+        <option value="caiyun">彩云 · 需 Key</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <select id="from"></select>
+      <button class="swap" id="swap" title="互换">⇄</button>
+      <select id="to"></select>
+    </div>
+
+    <textarea id="src" placeholder="输入要翻译的文字…"></textarea>
+
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="go">翻译</button>
+      <button class="ghost" id="clear">清空</button>
+      <button class="ghost" id="copy">复制结果</button>
+    </div>
+
+    <div class="out" id="out" style="margin-top:14px"><span class="muted">结果会显示在这里</span></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- 设置面板 -->
+  <div class="panel" id="panel-set">
+    <p class="hint">免费接口无需配置，开箱即用。若要用 <b>百度 / 有道 / 彩云</b> 的官方接口，请到对应开放平台申请 Key 填入下方 —— 仅保存在本机浏览器，不会上传。</p>
+
+    <div class="card">
+      <div class="kv">
+        <label>百度翻译 · APPID</label>
+        <input type="text" id="baidu_appid" placeholder="百度 APPID">
+        <label>百度翻译 · 密钥</label>
+        <input type="text" id="baidu_key" placeholder="百度 密钥">
+      </div>
+
+      <div class="kv">
+        <label>有道翻译 · 应用 ID</label>
+        <input type="text" id="youdao_appid" placeholder="有道 appKey">
+        <label>有道翻译 · 应用密钥</label>
+        <input type="text" id="youdao_key" placeholder="有道 appSecret">
+      </div>
+
+      <div class="kv">
+        <label>彩云小译 · Token</label>
+        <input type="text" id="caiyun_token" placeholder="彩云 token">
+      </div>
+
+      <div class="row" style="margin-top:6px">
+        <button class="primary" id="save">保存</button>
+        <button class="ghost" id="reset">清空所有 Key</button>
+      </div>
+      <div class="status" id="setstatus"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- 语言表 ---------- */
+const LANGS = [
+  ["auto","自动检测"],["zh-CN","中文(简体)"],["zh-TW","中文(繁体)"],["en","英语"],
+  ["ja","日语"],["ko","韩语"],["fr","法语"],["de","德语"],["es","西班牙语"],
+  ["ru","俄语"],["pt","葡萄牙语"],["it","意大利语"],["ar","阿拉伯语"],
+  ["th","泰语"],["vi","越南语"],["id","印尼语"],["ms","马来语"],["hi","印地语"],
+  ["tr","土耳其语"],["nl","荷兰语"],["pl","波兰语"],["sv","瑞典语"],["da","丹麦语"],
+  ["fi","芬兰语"],["no","挪威语"],["cs","捷克语"],["el","希腊语"],["he","希伯来语"],
+  ["uk","乌克兰语"],["ro","罗马尼亚语"],["hu","匈牙利语"],["bg","保加利亚语"],
+  ["sk","斯洛伐克语"],["sl","斯洛文尼亚语"],["hr","克罗地亚语"],["sr","塞尔维亚语"],
+  ["lt","立陶宛语"],["lv","拉脱维亚语"],["et","爱沙尼亚语"],["fa","波斯语"],
+  ["ur","乌尔都语"],["bn","孟加拉语"],["ta","泰米尔语"],["te","泰卢固语"],
+  ["ml","马拉雅拉姆语"],["mr","马拉地语"],["gu","古吉拉特语"],["kn","卡纳达语"],
+  ["pa","旁遮普语"],["ne","尼泊尔语"],["si","僧伽罗语"],["my","缅甸语"],
+  ["km","高棉语"],["lo","老挝语"],["ka","格鲁吉亚语"],["hy","亚美尼亚语"],
+  ["az","阿塞拜疆语"],["kk","哈萨克语"],["mn","蒙古语"],["af","南非荷兰语"],
+  ["sw","斯瓦希里语"],["am","阿姆哈拉语"],["yo","约鲁巴语"],["zu","祖鲁语"],
+  ["tl","菲律宾语"],["jw","爪哇语"],["su","巽他语"],["ceb","宿务语"],
+  ["la","拉丁语"],["cy","威尔士语"],["ga","爱尔兰语"],["is","冰岛语"],
+  ["mt","马耳他语"],["gl","加利西亚语"],["eu","巴斯克语"],["ca","加泰罗尼亚语"],
+  ["eo","世界语"],["yi","意第绪语"],["mk","马其顿语"],["sq","阿尔巴尼亚语"],
+  ["be","白俄罗斯语"],["bs","波斯尼亚语"],["fil","菲律宾语(他加禄)"],
+  ["ug","维吾尔语"]
+];
+
+function fillLangs(){
+  const from = document.getElementById('from');
+  const to = document.getElementById('to');
+  const fromL = [["auto","自动检测"]].concat(LANGS.filter(l=>l[0]!=='auto'));
+  const toL = LANGS.filter(l=>l[0]!=='auto');
+  from.innerHTML = fromL.map(l=>`<option value="${l[0]}">${l[1]}</option>`).join('');
+  to.innerHTML = toL.map(l=>`<option value="${l[0]}">${l[1]}</option>`).join('');
+  from.value = 'auto'; to.value = 'zh-CN';
+}
+fillLangs();
+
+/* ---------- Tab 切换 ---------- */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on');
+    document.getElementById('panel-'+(t.dataset.tab==='trans'?'trans':'set')).classList.add('on');
+  };
+});
+
+/* ---------- Key 存储 ---------- */
+const KEY = 'translator_keys_v1';
+function loadKeys(){
+  try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e){ return {}; }
+}
+function saveKeys(k){ localStorage.setItem(KEY, JSON.stringify(k)); }
+function applyKeysToUI(){
+  const k = loadKeys();
+  document.getElementById('baidu_appid').value = k.baidu_appid || '';
+  document.getElementById('baidu_key').value = k.baidu_key || '';
+  document.getElementById('youdao_appid').value = k.youdao_appid || '';
+  document.getElementById('youdao_key').value = k.youdao_key || '';
+  document.getElementById('caiyun_token').value = k.caiyun_token || '';
+}
+applyKeysToUI();
+document.getElementById('save').onclick = ()=>{
+  saveKeys({
+    baidu_appid: document.getElementById('baidu_appid').value.trim(),
+    baidu_key: document.getElementById('baidu_key').value.trim(),
+    youdao_appid: document.getElementById('youdao_appid').value.trim(),
+    youdao_key: document.getElementById('youdao_key').value.trim(),
+    caiyun_token: document.getElementById('caiyun_token').value.trim()
+  });
+  setSt('setstatus','已保存 ✅','ok');
+};
+document.getElementById('reset').onclick = ()=>{
+  saveKeys({}); applyKeysToUI();
+  setSt('setstatus','已清空','ok');
+};
+function setSt(id, msg, cls){
+  const el = document.getElementById(id);
+  el.textContent = msg; el.className = 'status ' + (cls||'');
+}
+
+/* ---------- 工具 ---------- */
+const $ = id => document.getElementById(id);
+$('swap').onclick = ()=>{
+  const f=$('from').value, t=$('to').value;
+  if(f==='auto'){ setSt('status','自动检测无法作为目标语言','err'); return; }
+  $('from').value=t; $('to').value=f;
+};
+$('clear').onclick = ()=>{ $('src').value=''; $('out').innerHTML='<span class="muted">结果会显示在这里</span>'; setSt('status',''); };
+$('copy').onclick = async ()=>{
+  const t = $('out').innerText;
+  try { await navigator.clipboard.writeText(t); setSt('status','已复制 ✅','ok'); }
+  catch(e){ setSt('status','复制失败，请长按选择','err'); }
+};
+
+/* ---------- 各引擎实现 ---------- */
+
+// 维吾尔语免费接口（Sarki，免key，国内直连，支持中/维/英互译）
+async function uyghurFree(text, from, to){
+  const fl = from==='auto' ? 'auto' : mapLang(from,'sarki');
+  const tl = mapLang(to,'sarki');
+  const r = await fetch('https://tarmilar.cn/api/translate.php', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Referer':'https://tarmilar.cn/'},
+    body: JSON.stringify({text:text, from:fl, to:tl})
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  if(!j.success) throw new Error('维语接口错误: '+(j.message||'未知'));
+  return j.data.target_text;
+}
+
+// 腾讯免费接口（免key，国内直连）
+async function tencentFree(text, from, to){
+  const fl = from==='auto' ? 'auto' : mapLang(from,'tencent');
+  const tl = mapLang(to,'tencent');
+  const r = await fetch('https://transmart.qq.com/api/imt', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Referer':'https://transmart.qq.com/'},
+    body: JSON.stringify({
+      header:{fn:'auto_translation', client_key:'browser-chrome-110.0.0'},
+      type:'text', model_category:'normal',
+      source:{lang:fl, text_list:[text]},
+      target:{lang:tl}
+    })
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  if(j.header && j.header.ret_code && j.header.ret_code!=='succ') throw new Error('腾讯错误 '+j.header.ret_code);
+  return (j.auto_translation||[]).join('\n');
+}
+
+// 有道免费接口（免key，语种较少，主要中英）
+async function youdaoFree(text, from, to){
+  const fl = mapLang(from,'youdao_free');
+  const tl = mapLang(to,'youdao_free');
+  const url = `https://aidemo.youdao.com/trans?q=${encodeURIComponent(text)}&from=${fl}&to=${tl}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  if(j.errorCode && j.errorCode!=='0') throw new Error('有道错误 '+j.errorCode+'（免费接口语种有限）');
+  return (j.translation||[]).join('\n');
+}
+
+// 谷歌免费接口
+async function googleFree(text, from, to){
+  const fl = from==='auto' ? 'auto' : from;
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${fl}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  if(!j || !j[0]) throw new Error('返回格式异常');
+  return j[0].map(x=>x[0]).join('');
+}
+
+// 必应免费接口
+async function bingFree(text, from, to){
+  const fl = from==='auto' ? 'auto-detect' : from;
+  const url = `https://api-edge.cognitive.microsofttranslator.com/translate?from=${fl}&to=${to}&api-version=3.0&includeSentenceLength=true`;
+  const r = await fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify([{Text:text}])
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status+'（必应接口可能已变更）');
+  const j = await r.json();
+  return j[0].translations[0].text;
+}
+
+// 百度
+async function baidu(text, from, to){
+  const k = loadKeys();
+  if(!k.baidu_appid || !k.baidu_key) throw new Error('未配置百度 Key，请到设置里填');
+  const fl = from==='auto' ? 'auto' : mapLang(from,'baidu');
+  const tl = mapLang(to,'baidu');
+  const salt = Date.now().toString();
+  const sign = md5(k.baidu_appid + text + salt + k.baidu_key);
+  const url = `https://fanyi-api.baidu.com/api/trans/vip/translate?q=${encodeURIComponent(text)}&from=${fl}&to=${tl}&appid=${k.baidu_appid}&salt=${salt}&sign=${sign}`;
+  const r = await fetch(url);
+  const j = await r.json();
+  if(j.error_code) throw new Error('百度错误 '+j.error_code+': '+(j.error_msg||''));
+  return j.trans_result.map(x=>x.dst).join('\n');
+}
+
+// 有道
+async function youdao(text, from, to){
+  const k = loadKeys();
+  if(!k.youdao_appid || !k.youdao_key) throw new Error('未配置有道 Key，请到设置里填');
+  const fl = from==='auto' ? 'auto' : mapLang(from,'youdao');
+  const tl = mapLang(to,'youdao');
+  const salt = Date.now().toString();
+  const curtime = Math.floor(Date.now()/1000).toString();
+  const trunc = (text.length<=20)? text : (text.slice(0,10)+text.length+text.slice(-10));
+  const sign = sha256(k.youdao_appid + trunc + salt + curtime + k.youdao_key);
+  const params = new URLSearchParams({q:text, from:fl, to:tl, appKey:k.youdao_appid, salt, sign, signType:'v3', curtime});
+  const r = await fetch('https://openapi.youdao.com/api', {method:'POST', body:params});
+  const j = await r.json();
+  if(j.errorCode && j.errorCode!=='0') throw new Error('有道错误 '+j.errorCode);
+  return (j.translation||[]).join('\n');
+}
+
+// 彩云
+async function caiyun(text, from, to){
+  const k = loadKeys();
+  if(!k.caiyun_token) throw new Error('未配置彩云 Token，请到设置里填');
+  const tl = mapLang(to,'caiyun');
+  const params = new URLSearchParams({source: text.split('\n'), trans_type:`${mapLang(from,'caiyun')}2${tl}`, request_id:'op', detect:'true'});
+  const r = await fetch('http://api.interpreter.caiyunai.com/v1/translator',{
+    method:'POST',
+    headers:{'content-type':'application/json','x-authorization':'token '+k.caiyun_token},
+    body: JSON.stringify({source:text.split('\n'), trans_type:`${mapLang(from,'caiyun')}2${tl}`, request_id:'op', detect:true})
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  if(j.message) throw new Error(j.message);
+  return Array.isArray(j.target)? j.target.join('\n') : j.target;
+}
+
+/* 语言映射（各家编码差异，简化处理） */
+function mapLang(code, sys){
+  if(code==='auto') return sys==='baidu'?'auto':'auto';
+  const map = {
+    'zh-CN': {baidu:'zh', youdao:'zh-CHS', caiyun:'zh', tencent:'zh', youdao_free:'zh-CHS'},
+    'zh-TW': {baidu:'cht', youdao:'zh-CHT', caiyun:'zh', tencent:'zh-TW', youdao_free:'zh-CHT'},
+    'en':    {baidu:'en', youdao:'en', caiyun:'en', tencent:'en', youdao_free:'en'},
+    'ja':    {baidu:'jp', youdao:'ja', caiyun:'ja', tencent:'ja', youdao_free:'ja'},
+    'ko':    {baidu:'kor', youdao:'ko', caiyun:'ko', tencent:'ko', youdao_free:'ko'},
+    'fr':    {baidu:'fra', youdao:'fr', caiyun:'fr', tencent:'fr', youdao_free:'fr'},
+    'de':    {baidu:'de', youdao:'de', caiyun:'de', tencent:'de', youdao_free:'de'},
+    'es':    {baidu:'spa', youdao:'es', caiyun:'es', tencent:'es', youdao_free:'es'},
+    'ru':    {baidu:'ru', youdao:'ru', caiyun:'ru', tencent:'ru', youdao_free:'ru'},
+    'pt':    {baidu:'pt', youdao:'pt', caiyun:'pt', tencent:'pt', youdao_free:'pt'},
+    'it':    {baidu:'it', youdao:'it', caiyun:'it', tencent:'it', youdao_free:'it'},
+    'th':    {baidu:'th', youdao:'th', caiyun:'th', tencent:'th', youdao_free:'th'},
+    'vi':    {baidu:'vie', youdao:'vi', caiyun:'vi', tencent:'vi', youdao_free:'vi'},
+    'ar':    {baidu:'ara', youdao:'ar', caiyun:'ar', tencent:'ar', youdao_free:'ar'},
+    'hi':    {baidu:'hi', youdao:'hi', caiyun:'hi', tencent:'hi', youdao_free:'hi'},
+    'id':    {baidu:'id', youdao:'id', caiyun:'id', tencent:'id', youdao_free:'id'},
+    'tr':    {baidu:'tr', youdao:'tr', caiyun:'tr', tencent:'tr', youdao_free:'tr'},
+    'nl':    {baidu:'nl', youdao:'nl', caiyun:'nl', tencent:'nl', youdao_free:'nl'},
+    'pl':    {baidu:'pl', youdao:'pl', caiyun:'pl', tencent:'pl', youdao_free:'pl'},
+    'sv':    {baidu:'swe', youdao:'sv', caiyun:'sv', tencent:'sv', youdao_free:'sv'},
+    'da':    {baidu:'dan', youdao:'da', caiyun:'da', tencent:'da', youdao_free:'da'},
+    'fi':    {baidu:'fin', youdao:'fi', caiyun:'fi', tencent:'fi', youdao_free:'fi'},
+    'cs':    {baidu:'cs', youdao:'cs', caiyun:'cs', tencent:'cs', youdao_free:'cs'},
+    'el':    {baidu:'el', youdao:'el', caiyun:'el', tencent:'el', youdao_free:'el'},
+    'he':    {baidu:'heb', youdao:'he', caiyun:'he', tencent:'he', youdao_free:'he'},
+    'uk':    {baidu:'ukr', youdao:'uk', caiyun:'uk', tencent:'uk', youdao_free:'uk'},
+    'ro':    {baidu:'rom', youdao:'ro', caiyun:'ro', tencent:'ro', youdao_free:'ro'},
+    'hu':    {baidu:'hu', youdao:'hu', caiyun:'hu', tencent:'hu', youdao_free:'hu'},
+    'bg':    {baidu:'bul', youdao:'bg', caiyun:'bg', tencent:'bg', youdao_free:'bg'},
+    'fa':    {baidu:'per', youdao:'fa', caiyun:'fa', tencent:'fa', youdao_free:'fa'},
+    'ms':    {baidu:'may', youdao:'ms', caiyun:'ms', tencent:'ms', youdao_free:'ms'},
+    'tl':    {baidu:'fil', youdao:'tl', caiyun:'tl', tencent:'tl', youdao_free:'tl'},
+    'my':    {baidu:'bur', youdao:'my', caiyun:'my', tencent:'my', youdao_free:'my'},
+    'km':    {baidu:'khm', youdao:'km', caiyun:'km', tencent:'km', youdao_free:'km'},
+    'no':    {baidu:'nor', youdao:'no', caiyun:'no', tencent:'no', youdao_free:'no'},
+    'sr':    {baidu:'srp', youdao:'sr', caiyun:'sr', tencent:'sr', youdao_free:'sr'},
+    'ug':    {sarki:'ug', tencent:'ug', baidu:'ug', youdao:'ug', caiyun:'ug', youdao_free:'ug'}
+  };
+  return (map[code] && map[code][sys]) || code;
+}
+
+/* MD5 / SHA256 简易实现（用于百度/有道签名） */
+function md5(s){
+  // 简化：使用内置 SubtleCrypto 异步不可用，改用同步实现
+  return md5impl(s);
+}
+function md5impl(str){
+  function rotl(n,c){return (n<<c)|(n>>>(32-c));}
+  function add(a,b){return (a+b)&0xFFFFFFFF;}
+  function K(i){return Math.floor(Math.abs(Math.sin(i))*4294967296);}
+  let msg = unescape(encodeURIComponent(str));
+  let len = msg.length;
+  let words = [];
+  for(let i=0;i<len;i++){ words[i>>2] |= msg.charCodeAt(i) << ((i%4)*8); }
+  words[len>>2] |= 0x80 << ((len%4)*8);
+  words[(((len+8)>>6)+1)*16-2] = len*8;
+  words[(((len+8)>>6)+1)*16-1] = 0;
+  let a=1732584193,b=-271733879,c=-1732584194,d=271733878;
+  for(let i=0;i<words.length;i+=16){
+    let A=a,B=b,C=c,D=d;
+    for(let j=0;j<64;j++){
+      let F,g;
+      if(j<16){F=(B&C)|(~B&D);g=j;}
+      else if(j<32){F=(D&B)|(~D&C);g=(5*j+1)%16;}
+      else if(j<48){F=B^C^D;g=(3*j+5)%16;}
+      else {F=C^(B|~D);g=(7*j)%16;}
+      F=add(add(add(F,A),K(j+1)),words[i+g]);
+      A=D;D=C;C=B;B=add(B,rotl(F,[7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21][j%16]||[7,12,17,22][j%4]));
+    }
+    a=add(a,A);b=add(b,B);c=add(c,C);d=add(d,D);
+  }
+  function hex(n){let s='';for(let i=0;i<4;i++){s+=('0'+((n>>(i*8))&0xFF).toString(16)).slice(-2);}return s;}
+  return hex(a)+hex(b)+hex(c)+hex(d);
+}
+async function sha256(str){
+  const buf = new TextEncoder().encode(str);
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+/* ---------- 主翻译 ---------- */
+$('go').onclick = async ()=>{
+  const text = $('src').value.trim();
+  if(!text){ setSt('status','请输入内容','err'); return; }
+  const eng = $('engine').value;
+  const from = $('from').value, to = $('to').value;
+  const btn = $('go');
+  btn.disabled = true; btn.textContent = '翻译中';
+  setSt('status','');
+  $('out').innerHTML = '<span class="muted">翻译中…</span>';
+  try {
+    let res;
+    if(eng==='tencent_free') res = await tencentFree(text, from, to);
+    else if(eng==='uyghur_free') res = await uyghurFree(text, from, to);
+    else if(eng==='youdao_free') res = await youdaoFree(text, from, to);
+    else if(eng==='google_free') res = await googleFree(text, from, to);
+    else if(eng==='baidu') res = await baidu(text, from, to);
+    else if(eng==='youdao') res = await youdao(text, from, to);
+    else if(eng==='caiyun') res = await caiyun(text, from, to);
+    const el = $('out');
+    el.textContent = res;
+    // 维吾尔语/阿拉伯语等 RTL 语种右对齐
+    el.classList.toggle('rtl', to==='ug' || to==='ar' || to==='he' || to==='fa' || to==='ur');
+    setSt('status','完成','ok');
+  } catch(e){
+    $('out').innerHTML = '<span class="muted">翻译失败</span>';
+    setSt('status','❌ '+e.message,'err');
+  } finally {
+    btn.disabled = false; btn.textContent = '翻译';
+  }
+};
+</script>
+</body>
+</html>
